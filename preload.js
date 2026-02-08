@@ -23,8 +23,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Fetch allowed hosts from main process (centralized source of truth)
-    const allowedHostsList = await ipcRenderer.invoke('get-allowed-hosts');
-    const allowedHosts = new Set(allowedHostsList);
+    let allowedHosts;
+    try {
+        const allowedHostsList = await ipcRenderer.invoke('get-allowed-hosts');
+        allowedHosts = new Set(allowedHostsList);
+    } catch (e) {
+        console.error('Failed to fetch allowed hosts from main process:', e);
+        // Fallback to default hosts if IPC fails
+        allowedHosts = new Set(['gemini.google.com', 'accounts.google.com']);
+    }
 
     // Listen for click events and open non-allowed links externally
     document.addEventListener('click', (event) => {
