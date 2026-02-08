@@ -5,56 +5,113 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;700&display=swap">
     <style>
         body {
-            font-family: 'Ubuntu', sans-serif;
-            background-color: #f0f0f0;
+            font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e8eaf6 100%);
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             margin: 0;
+            color: #1f1f1f;
+            overflow: hidden;
         }
         .about-container {
-            background-color: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            max-width: 500px;
+            background: #ffffff;
+            padding: 32px 40px;
+            border-radius: 16px;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            max-width: 420px;
+            width: 100%;
             text-align: center;
         }
+        .app-icon {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 16px;
+        }
         .about-header {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 700;
-            margin-bottom: 10px;
+            margin-bottom: 4px;
+            background: linear-gradient(135deg, #4285F4 0%, #9B72CB 50%, #D96570 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        .about-content {
-            font-size: 16px;
-            margin-bottom: 20px;
+        .about-version {
+            font-size: 13px;
+            color: #5f6368;
+            margin-bottom: 16px;
         }
-        .about-footer {
+        .about-author {
             font-size: 14px;
-            color: #888;
+            color: #5f6368;
+            margin-bottom: 24px;
+        }
+        .about-links {
+            margin-bottom: 24px;
+        }
+        .about-links a {
+            display: inline-block;
+            font-size: 14px;
+            color: #1a73e8;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .about-links a:hover {
+            color: #174ea6;
         }
         .btn-close {
-            background-color: #0078D7;
-            color: white;
+            background: linear-gradient(135deg, #4285F4 0%, #669DF6 100%);
+            color: #ffffff;
             border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
+            padding: 10px 28px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
         }
         .btn-close:hover {
-            background-color: #005A9E;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(66, 133, 244, 0.35);
+        }
+        .btn-close:active {
+            transform: translateY(0);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: linear-gradient(135deg, #1e1f20 0%, #131314 100%);
+                color: #e3e3e3;
+            }
+            .about-container {
+                background: #2b2c2e;
+                border-color: #3c4043;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            }
+            .about-version,
+            .about-author {
+                color: #9aa0a6;
+            }
+            .about-links a {
+                color: #8ab4f8;
+            }
+            .about-links a:hover {
+                color: #aecbfa;
+            }
         }
     </style>
 </head>
 <body>
     <div class="about-container">
-	<div class="about-header"><span id="app-title"></span></div>
-	<div class="about-content">Version <span id="app-version"></span><br>By <span id="app-author"></span></div>
-	<div class="about-content"><a target="_new" href="@@BUGURL@@">File a bug</a><br></div>
+        <img class="app-icon" src="icon.png" alt="Gemini">
+        <div class="about-header"><span id="app-title"></span></div>
+        <div class="about-version">Version <span id="app-version"></span></div>
+        <div class="about-author">By <span id="app-author"></span></div>
+        <div class="about-links"><a target="_new" href="@@BUGURL@@">Report an issue</a></div>
         <button class="btn-close" onclick="window.close();">Close</button>
     </div>
     <script>
