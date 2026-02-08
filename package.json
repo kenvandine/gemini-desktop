@@ -6,7 +6,8 @@
   "main": "index.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --publish never"
+    "build": "electron-builder --publish never",
+    "screenshot": "electron screenshot.js"
   },
   "build": {
     "asar": false,

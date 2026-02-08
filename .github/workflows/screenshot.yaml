@@ -1,0 +1,106 @@
+name: Screenshot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgbm1 libasound2t64 libgtk-3-0 libnss3 libxss1 libxtst6 xauth
+          npm install
+
+      - name: Run app and capture screenshot
+        run: |
+          # Run the screenshot script with Electron using xvfb-run
+          # xvfb-run automatically starts and manages Xvfb
+          # --no-sandbox is required for running Electron in CI environments
+          SCREENSHOT_PATH=screenshot.png xvfb-run -a npx electron --no-sandbox screenshot.js
+          
+          # Verify screenshot was created
+          ls -lh screenshot.png
+          file screenshot.png
+
+      - name: Upload screenshot as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-screenshot
+          path: screenshot.png
+          retention-days: 30
+
+      - name: Upload screenshot to catbox (free anonymous hosting)
+        if: github.event_name == 'pull_request'
+        id: catbox
+        continue-on-error: true
+        run: |
+          # Upload to catbox.moe (free, anonymous, no API key needed)
+          response=$(curl -s -F "reqtype=fileupload" -F "fileToUpload=@screenshot.png" https://catbox.moe/user/api.php)
+          
+          if [ -n "$response" ] && [[ $response == http* ]]; then
+            echo "image_url=$response" >> $GITHUB_OUTPUT
+            echo "Uploaded to: $response"
+          else
+            echo "Upload failed"
+            echo "$response"
+          fi
+
+      - name: Comment PR with screenshot
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Read the screenshot file for size info
+            const screenshotPath = path.join(process.env.GITHUB_WORKSPACE, 'screenshot.png');
+            const screenshotBuffer = fs.readFileSync(screenshotPath);
+            const imageSizeKB = Math.round(screenshotBuffer.length / 1024);
+            
+            // Get workflow run URL for artifacts
+            const runId = context.runId;
+            const repoUrl = context.payload.repository.html_url;
+            const artifactUrl = `${repoUrl}/actions/runs/${runId}`;
+            
+            // Check if image upload succeeded
+            const imageUrl = process.env.IMAGE_URL || '';
+            
+            let body = `## 📸 App Screenshot\n\n`;
+            
+            if (imageUrl) {
+              body += `<details open>\n<summary>Screenshot (${imageSizeKB} KB)</summary>\n\n`;
+              body += `![App Screenshot](${imageUrl})\n\n`;
+              body += `</details>\n\n`;
+              body += `**Direct link:** [View full size](${imageUrl})\n\n`;
+            } else {
+              body += `Screenshot captured (${imageSizeKB} KB)\n\n`;
+            }
+            
+            body += `**Download:** [View Artifacts](${artifactUrl})\n\n`;
+            body += `> 💡 The screenshot is available as a workflow artifact above.`;
+            
+            // Post the final comment with the screenshot
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+        env:
+          IMAGE_URL: ${{ steps.catbox.outputs.image_url }}
