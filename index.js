@@ -148,7 +148,7 @@ function createWindow () {
     
     // Network-related error codes that should trigger offline page
     const networkErrors = [
-      -2,   // ERR_FAILED (generic network failure)
+      -2,   // ERR_FAILED (generic network failure - may include some non-network cases)
       -7,   // ERR_TIMED_OUT
       -21,  // ERR_NETWORK_CHANGED
       -100, // ERR_CONNECTION_CLOSED
@@ -190,13 +190,17 @@ function createWindow () {
       const parsedUrl = new URL(url);
       const targetHost = parsedUrl.host;
       
-      // Only handle http(s) protocols - allow other protocols to navigate normally
+      // Only handle http(s) protocols - prevent potentially unsafe protocols
       if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
         if (!allowedHosts.has(targetHost)) {
           console.log('will-navigate external: ', url);
           event.preventDefault();
           shell.openExternal(url);
         }
+      } else {
+        // Block other protocols (javascript:, data:, etc.) as they could be unsafe
+        console.warn('will-navigate: blocked unsafe protocol', parsedUrl.protocol, url);
+        event.preventDefault();
       }
     } catch (e) {
       console.warn('will-navigate: invalid URL, preventing navigation', url, e);
