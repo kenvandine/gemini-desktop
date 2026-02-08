@@ -143,21 +143,45 @@ function createWindow () {
     }
   });
 
+  const appHost = new URL(appURL).host;
+
   // New-window requests (window.open / target="_blank"): only keep the
-  // app host in-app; everything else opens in the default browser
-  win.webContents.setWindowOpenHandler(({url}) => {
+  // app host in-app; everything else opens in the default browser with
+  // a strict allowlist of URL schemes.
+  win.webContents.setWindowOpenHandler(({ url }) => {
     console.log('windowOpenHandler: ', url);
-    try {
-      const host = new URL(url).host;
-      if (host === new URL(appURL).host) {
-        win.loadURL(url);
-        return { action: 'deny' };
-      }
-    } catch (e) {
-      // If URL parsing fails, open externally
+
+    // Explicitly allow mailto links
+    if (url.startsWith('mailto:')) {
+      shell.openExternal(url);
+      return { action: 'deny' };
     }
-    shell.openExternal(url);
-    return { action: 'deny' }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch (e) {
+      console.warn('windowOpenHandler: invalid URL, denying navigation', url, e);
+      return { action: 'deny' };
+    }
+
+    const { protocol, host } = parsedUrl;
+
+    // Keep same-host http(s) links in-app
+    if ((protocol === 'https:' || protocol === 'http:') && host === appHost) {
+      win.loadURL(url);
+      return { action: 'deny' };
+    }
+
+    // Open other http(s) links externally
+    if (protocol === 'https:' || protocol === 'http:') {
+      shell.openExternal(url);
+    } else {
+      // Block non-http(s) schemes (file:, javascript:, custom protocols, etc.)
+      console.warn('windowOpenHandler: blocked non-http(s) URL', url);
+    }
+
+    return { action: 'deny' };
   });
 
   win.webContents.on('before-input-event', (event, input) => {
