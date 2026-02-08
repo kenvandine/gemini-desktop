@@ -10,6 +10,8 @@ window.addEventListener('offline', updateNetworkStatus);
 
 // Listen for DOMContentLoaded event
 window.addEventListener('DOMContentLoaded', () => {
+    // Send initial network status to main process on page load
+    updateNetworkStatus();
     // Wire up retry button on offline page
     const retryBtn = document.getElementById('retry-btn');
     if (retryBtn) {
