@@ -180,10 +180,18 @@ function createWindow () {
 
   // Intercept navigation and only allow app + auth hosts in-app
   win.webContents.on('will-navigate', (event, url) => {
-    // Allow file:// protocol for offline.html and other app-internal files
+    // Allow file:// protocol only for app-internal files
     if (url.startsWith('file://')) {
-      console.log('will-navigate: allowing file:// protocol', url);
-      return;
+      // Ensure file:// URLs are within the app directory for security
+      const filePath = url.replace('file://', '');
+      if (filePath.startsWith(__dirname)) {
+        console.log('will-navigate: allowing app-internal file:// protocol', url);
+        return;
+      } else {
+        console.warn('will-navigate: blocked file:// URL outside app directory', url);
+        event.preventDefault();
+        return;
+      }
     }
     
     try {
