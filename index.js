@@ -146,25 +146,23 @@ function createWindow () {
   win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     console.log(`did-fail-load: ${errorDescription} (${errorCode})`);
     
-    // Common network-related error codes:
-    // -2: ERR_FAILED (generic network failure)
-    // -6: ERR_FILE_NOT_FOUND (file protocol failures)
-    // -7: ERR_TIMED_OUT
-    // -21: ERR_NETWORK_CHANGED
-    // -100: ERR_CONNECTION_CLOSED
-    // -101: ERR_CONNECTION_RESET
-    // -102: ERR_CONNECTION_REFUSED
-    // -103: ERR_CONNECTION_ABORTED
-    // -104: ERR_CONNECTION_FAILED
-    // -105: ERR_NAME_NOT_RESOLVED
-    // -106: ERR_INTERNET_DISCONNECTED
-    // -109: ERR_ADDRESS_UNREACHABLE
-    // -118: ERR_CONNECTION_TIMED_OUT
-    // -137: ERR_NAME_RESOLUTION_FAILED
-    // -138: ERR_TEMPORARILY_THROTTLED
-    // -324: ERR_EMPTY_RESPONSE
-    
-    const networkErrors = [-2, -7, -21, -100, -101, -102, -103, -104, -105, -106, -109, -118, -137, -324];
+    // Network-related error codes that should trigger offline page
+    const networkErrors = [
+      -2,   // ERR_FAILED (generic network failure)
+      -7,   // ERR_TIMED_OUT
+      -21,  // ERR_NETWORK_CHANGED
+      -100, // ERR_CONNECTION_CLOSED
+      -101, // ERR_CONNECTION_RESET
+      -102, // ERR_CONNECTION_REFUSED
+      -103, // ERR_CONNECTION_ABORTED
+      -104, // ERR_CONNECTION_FAILED
+      -105, // ERR_NAME_NOT_RESOLVED
+      -106, // ERR_INTERNET_DISCONNECTED
+      -109, // ERR_ADDRESS_UNREACHABLE
+      -118, // ERR_CONNECTION_TIMED_OUT
+      -137, // ERR_NAME_RESOLUTION_FAILED
+      -324, // ERR_EMPTY_RESPONSE
+    ];
     
     if (networkErrors.includes(errorCode)) {
       wasOffline = true;
