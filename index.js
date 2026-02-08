@@ -195,12 +195,29 @@ function createWindow () {
       }
 
       // Only treat failures of the primary app URL as "offline" for this window
-      if (validatedURL && !validatedURL.startsWith(appURL)) {
-        console.log(
-          'did-fail-load: main-frame failure for non-app URL, not showing offline page:',
-          validatedURL
-        );
-        return;
+      // Parse both URLs to avoid false positives with string matching
+      if (validatedURL) {
+        try {
+          const failedUrl = new URL(validatedURL);
+          const expectedUrl = new URL(appURL);
+          
+          // Check if protocol and hostname match
+          if (failedUrl.protocol !== expectedUrl.protocol || 
+              failedUrl.hostname !== expectedUrl.hostname) {
+            console.log(
+              'did-fail-load: main-frame failure for non-app URL, not showing offline page:',
+              validatedURL
+            );
+            return;
+          }
+        } catch (e) {
+          // If URL parsing fails, be conservative and don't show offline page
+          console.log(
+            'did-fail-load: failed to parse URLs, not showing offline page:',
+            validatedURL
+          );
+          return;
+        }
       }
       
       // Network-related error codes that should trigger offline page
@@ -253,9 +270,10 @@ function createWindow () {
         const rel = relative(appDir, filePath);
         
         // Check if the relative path doesn't escape the app directory
-        // Empty string means the paths are equal (app directory root itself)
-        // A relative path starting with '..' means it goes outside the app directory
-        if (!rel || !rel.startsWith('..')) {
+        // - Empty string means filePath equals appDir (app directory root itself) - ALLOW
+        // - Path not starting with '..' means it's within the app directory - ALLOW
+        // - Path starting with '..' means it escapes the app directory - BLOCK
+        if (rel === '' || !rel.startsWith('..')) {
           console.log('will-navigate: allowing app-internal file:// protocol', url);
           return;
         } else {
