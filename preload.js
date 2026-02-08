@@ -1,5 +1,8 @@
 const { ipcRenderer } = require('electron');
 
+// Default fallback hosts if IPC fetch fails (must match main process allowedHosts)
+const DEFAULT_ALLOWED_HOSTS = ['gemini.google.com', 'accounts.google.com'];
+
 // Network status detection
 function updateNetworkStatus() {
     ipcRenderer.send('network-status', navigator.onLine);
@@ -9,22 +12,29 @@ window.addEventListener('online', updateNetworkStatus);
 window.addEventListener('offline', updateNetworkStatus);
 
 // Listen for DOMContentLoaded event
-window.addEventListener('DOMContentLoaded', () => {
-    // Send initial network status to main process on page load
-    updateNetworkStatus();
+window.addEventListener('DOMContentLoaded', async () => {
     // Wire up retry button on offline page
     const retryBtn = document.getElementById('retry-btn');
     if (retryBtn) {
         retryBtn.addEventListener('click', () => {
             ipcRenderer.send('retry-connection');
         });
+    } else {
+        // Only send initial network status if NOT on offline page
+        // to avoid triggering reload loops
+        updateNetworkStatus();
     }
 
-    // Hosts allowed to navigate within the Electron window
-    const allowedHosts = new Set([
-        'gemini.google.com',
-        'accounts.google.com',
-    ]);
+    // Fetch allowed hosts from main process (centralized source of truth)
+    let allowedHosts;
+    try {
+        const allowedHostsArray = await ipcRenderer.invoke('get-allowed-hosts');
+        allowedHosts = new Set(allowedHostsArray);
+    } catch (e) {
+        console.error('Failed to fetch allowed hosts from main process:', e);
+        // Fallback to default hosts if IPC fails
+        allowedHosts = new Set(DEFAULT_ALLOWED_HOSTS);
+    }
 
     // Listen for click events and open non-allowed links externally
     document.addEventListener('click', (event) => {

@@ -1,5 +1,6 @@
 const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, shell } = require('electron');
-const { join } = require('path');
+const { join, relative, normalize } = require('path');
+const { fileURLToPath } = require('url');
 const fs = require('fs');
 
 let tray = null;
@@ -7,6 +8,13 @@ let win = null;
 let wasOffline = false;
 const appURL = 'https://gemini.google.com'
 const icon = nativeImage.createFromPath(join(__dirname, 'icon.png'));
+
+// Centralized list of hosts allowed to navigate within the Electron window
+// Used by both will-navigate handler and preload click handler
+const allowedHosts = [
+  'gemini.google.com',
+  'accounts.google.com',
+];
 
 // IPC listeners (registered once, outside createWindow to avoid leaks)
 ipcMain.on('zoom-in', () => {
@@ -42,12 +50,43 @@ ipcMain.on('log-message', (event, message) => {
   console.log('Log from preload: ', message);
 });
 
+// Return allowed hosts list to preload script
+ipcMain.handle('get-allowed-hosts', () => {
+  return allowedHosts;
+});
+
 // Open links with default browser
 ipcMain.on('open-external-link', (event, url) => {
   console.log('open-external-link: ', url);
-  if (url) {
-    shell.openExternal(url);
+  
+  if (!url || typeof url !== 'string') {
+    console.warn('open-external-link: invalid url value');
+    return;
   }
+
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) {
+    console.warn('open-external-link: empty url after trimming');
+    return;
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(trimmedUrl);
+  } catch (e) {
+    console.warn('open-external-link: failed to parse url', e);
+    return;
+  }
+
+  const allowedProtocols = ['http:', 'https:', 'mailto:'];
+  if (!allowedProtocols.includes(parsedUrl.protocol)) {
+    console.warn(
+      `open-external-link: blocked url with disallowed protocol: ${parsedUrl.protocol}`
+    );
+    return;
+  }
+
+  shell.openExternal(trimmedUrl);
 });
 
 // Retry connection from offline page
@@ -62,17 +101,17 @@ ipcMain.on('retry-connection', () => {
 });
 
 // Listen for network status updates from the preload script
-// Only act on transitions to avoid reload loops
+// Only show offline page when going offline - do NOT auto-reload when online
+// to avoid loops (navigator.onLine can be true during DNS failures/captive portals)
 ipcMain.on('network-status', (event, isOnline) => {
   console.log(`Network status: ${isOnline ? 'online' : 'offline'}`);
   if (!win || win.isDestroyed()) {
     console.warn('network-status: window not available');
     return;
   }
-  if (isOnline && wasOffline) {
-    wasOffline = false;
-    win.loadURL(appURL);
-  } else if (!isOnline && !wasOffline) {
+  // Only automatically show offline page when going offline
+  // User must explicitly click Retry to attempt reconnection
+  if (!isOnline && !wasOffline) {
     wasOffline = true;
     win.loadFile('offline.html');
   }
@@ -138,57 +177,111 @@ function createWindow () {
   tray.setToolTip('Gemini');
   tray.setContextMenu(contextMenu);
 
-  win.loadURL(appURL);
-
   // Show offline page if the URL fails to load (e.g. no internet)
   // Filter by network-related error codes to avoid incorrectly treating
   // in-app navigations/redirects as offline
-  win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.log(`did-fail-load: ${errorDescription} (${errorCode})`);
-    
-    // Network-related error codes that should trigger offline page
-    const networkErrors = [
-      -2,   // ERR_FAILED (generic network failure - may include some non-network cases)
-      -7,   // ERR_TIMED_OUT
-      -21,  // ERR_NETWORK_CHANGED
-      -100, // ERR_CONNECTION_CLOSED
-      -101, // ERR_CONNECTION_RESET
-      -102, // ERR_CONNECTION_REFUSED
-      -103, // ERR_CONNECTION_ABORTED
-      -104, // ERR_CONNECTION_FAILED
-      -105, // ERR_NAME_NOT_RESOLVED
-      -106, // ERR_INTERNET_DISCONNECTED
-      -109, // ERR_ADDRESS_UNREACHABLE
-      -118, // ERR_CONNECTION_TIMED_OUT
-      -137, // ERR_NAME_RESOLUTION_FAILED
-      -324, // ERR_EMPTY_RESPONSE
-    ];
-    
-    if (networkErrors.includes(errorCode)) {
-      wasOffline = true;
-      win.loadFile('offline.html');
-    } else {
-      console.log(`did-fail-load: ignoring non-network error ${errorCode}`);
-    }
-  });
+  // Attach handler BEFORE loadURL to ensure we catch initial load failures
+  win.webContents.on(
+    'did-fail-load',
+    (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      console.log(
+        `did-fail-load: ${errorDescription} (${errorCode}) on ${validatedURL} (isMainFrame=${isMainFrame})`
+      );
 
-  // Hosts allowed to navigate within the Electron window
-  const allowedHosts = new Set([
-    'gemini.google.com',
-    'accounts.google.com',
-  ]);
+      // Only handle failures for the main frame to avoid subresource/iframe failures
+      if (!isMainFrame) {
+        console.log('did-fail-load: ignoring subframe/resource failure');
+        return;
+      }
+
+      // Only treat failures of the primary app URL as "offline" for this window
+      // Parse both URLs to avoid false positives with string matching
+      if (validatedURL) {
+        try {
+          const failedUrl = new URL(validatedURL);
+          const expectedUrl = new URL(appURL);
+          
+          // Check if protocol and hostname match (pathname is intentionally ignored
+          // so that any page on the app domain that fails to load shows the offline page)
+          const isDifferentDomain = (
+            failedUrl.protocol !== expectedUrl.protocol || 
+            failedUrl.hostname !== expectedUrl.hostname
+          );
+          
+          if (isDifferentDomain) {
+            console.log(
+              'did-fail-load: main-frame failure for non-app URL, not showing offline page:',
+              validatedURL
+            );
+            return;
+          }
+        } catch (e) {
+          // If URL parsing fails, be conservative and don't show offline page
+          console.log(
+            'did-fail-load: failed to parse URLs, not showing offline page:',
+            validatedURL
+          );
+          return;
+        }
+      }
+      
+      // Network-related error codes that should trigger offline page
+      const networkErrors = [
+        -2,   // ERR_FAILED (generic network failure - may include some non-network cases)
+        -7,   // ERR_TIMED_OUT
+        -21,  // ERR_NETWORK_CHANGED
+        -100, // ERR_CONNECTION_CLOSED
+        -101, // ERR_CONNECTION_RESET
+        -102, // ERR_CONNECTION_REFUSED
+        -103, // ERR_CONNECTION_ABORTED
+        -104, // ERR_CONNECTION_FAILED
+        -105, // ERR_NAME_NOT_RESOLVED
+        -106, // ERR_INTERNET_DISCONNECTED
+        -109, // ERR_ADDRESS_UNREACHABLE
+        -118, // ERR_CONNECTION_TIMED_OUT
+        -137, // ERR_NAME_RESOLUTION_FAILED
+        -324, // ERR_EMPTY_RESPONSE
+      ];
+      
+      if (networkErrors.includes(errorCode)) {
+        wasOffline = true;
+        win.loadFile('offline.html');
+      } else {
+        console.log(`did-fail-load: ignoring non-network error ${errorCode}`);
+      }
+    }
+  );
+
+  win.loadURL(appURL);
+
+  // Use centralized allowedHosts (convert to Set for efficient lookup)
+  const allowedHostsSet = new Set(allowedHosts);
 
   // Intercept navigation and only allow app + auth hosts in-app
   win.webContents.on('will-navigate', (event, url) => {
     // Allow file:// protocol only for app-internal files
     if (url.startsWith('file://')) {
-      // Ensure file:// URLs are within the app directory for security
-      const filePath = url.replace('file://', '');
-      if (filePath.startsWith(__dirname)) {
-        console.log('will-navigate: allowing app-internal file:// protocol', url);
-        return;
-      } else {
-        console.warn('will-navigate: blocked file:// URL outside app directory', url);
+      try {
+        // Properly parse file URL and validate it's within app directory
+        const parsedFileUrl = new URL(url);
+        const filePath = normalize(fileURLToPath(parsedFileUrl));
+        const appDir = normalize(__dirname);
+        const relativePath = relative(appDir, filePath);
+        
+        // Check if the relative path doesn't escape the app directory
+        // Note: normalize() already resolves all '..' components in both paths,
+        // so checking if relativePath starts with '..' is sufficient to detect
+        // any attempt to escape the app directory (e.g., foo/../../etc/passwd)
+        if (!relativePath.startsWith('..')) {
+          console.log('will-navigate: allowing app-internal file:// protocol', url);
+          return;
+        } else {
+          console.warn('will-navigate: blocked file:// URL outside app directory', url);
+          event.preventDefault();
+          return;
+        }
+      } catch (e) {
+        console.warn('will-navigate: invalid file:// URL', url, e);
         event.preventDefault();
         return;
       }
@@ -200,7 +293,7 @@ function createWindow () {
       
       // Only handle http(s) protocols - prevent potentially unsafe protocols
       if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
-        if (!allowedHosts.has(targetHost)) {
+        if (!allowedHostsSet.has(targetHost)) {
           console.log('will-navigate external: ', url);
           event.preventDefault();
           shell.openExternal(url);
