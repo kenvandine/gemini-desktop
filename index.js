@@ -246,8 +246,8 @@ function createWindow () {
         const rel = relative(appDir, filePath);
         
         // Check if the relative path doesn't escape the app directory
-        // (doesn't start with .. or an absolute path)
-        if (rel && !rel.startsWith('..') && !relative(appDir, filePath).startsWith('/')) {
+        // A relative path starting with '..' means it goes outside the app directory
+        if (rel && !rel.startsWith('..')) {
           console.log('will-navigate: allowing app-internal file:// protocol', url);
           return;
         } else {
