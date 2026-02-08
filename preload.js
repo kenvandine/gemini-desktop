@@ -38,11 +38,17 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Listen for click events and open non-allowed links externally
     document.addEventListener('click', (event) => {
-        const link = event.target.closest('a');
+        // Guard against non-Element targets (e.g., text nodes)
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        const link = target.closest('a');
         if (link && link.href && link.href.startsWith('http')) {
             try {
-                const host = new URL(link.href).host;
-                if (allowedHosts.has(host)) {
+                // Use hostname (not host) to exclude port from comparison
+                const hostname = new URL(link.href).hostname;
+                if (allowedHosts.has(hostname)) {
                     return; // Allow app + auth links to navigate in-app
                 }
             } catch (e) {

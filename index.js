@@ -1,5 +1,5 @@
 const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, shell } = require('electron');
-const { join, relative, normalize } = require('path');
+const { join, relative, normalize, isAbsolute, sep } = require('path');
 const { fileURLToPath } = require('url');
 const fs = require('fs');
 
@@ -269,17 +269,23 @@ function createWindow () {
         const relativePath = relative(appDir, filePath);
         
         // Check if the relative path doesn't escape the app directory
-        // Note: normalize() already resolves all '..' components in both paths,
-        // so checking if relativePath starts with '..' is sufficient to detect
-        // any attempt to escape the app directory (e.g., foo/../../etc/passwd)
-        if (!relativePath.startsWith('..')) {
-          console.log('will-navigate: allowing app-internal file:// protocol', url);
+        // On Windows, path.relative() can return an absolute path if drives differ,
+        // so we also check for absolute paths. Additionally, we need to check if
+        // relativePath starts with '..' followed by separator to catch escape attempts.
+        if (isAbsolute(relativePath)) {
+          console.warn('will-navigate: blocked file:// URL on different drive/root', url);
+          event.preventDefault();
           return;
-        } else {
+        }
+        
+        if (relativePath.startsWith('..' + sep) || relativePath === '..') {
           console.warn('will-navigate: blocked file:// URL outside app directory', url);
           event.preventDefault();
           return;
         }
+        
+        console.log('will-navigate: allowing app-internal file:// protocol', url);
+        return;
       } catch (e) {
         console.warn('will-navigate: invalid file:// URL', url, e);
         event.preventDefault();
@@ -289,11 +295,12 @@ function createWindow () {
     
     try {
       const parsedUrl = new URL(url);
-      const targetHost = parsedUrl.host;
+      // Use hostname (not host) to exclude port from comparison
+      const targetHostname = parsedUrl.hostname;
       
       // Only handle http(s) protocols - prevent potentially unsafe protocols
       if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
-        if (!allowedHostsSet.has(targetHost)) {
+        if (!allowedHostsSet.has(targetHostname)) {
           console.log('will-navigate external: ', url);
           event.preventDefault();
           shell.openExternal(url);
