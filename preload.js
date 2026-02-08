@@ -1,5 +1,8 @@
 const { ipcRenderer } = require('electron');
 
+// Default fallback hosts if IPC fetch fails (must match main process allowedHosts)
+const DEFAULT_ALLOWED_HOSTS = ['gemini.google.com', 'accounts.google.com'];
+
 // Network status detection
 function updateNetworkStatus() {
     ipcRenderer.send('network-status', navigator.onLine);
@@ -30,7 +33,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {
         console.error('Failed to fetch allowed hosts from main process:', e);
         // Fallback to default hosts if IPC fails
-        allowedHosts = new Set(['gemini.google.com', 'accounts.google.com']);
+        allowedHosts = new Set(DEFAULT_ALLOWED_HOSTS);
     }
 
     // Listen for click events and open non-allowed links externally
