@@ -44,8 +44,10 @@ parts:
       mkdir -p $SNAPCRAFT_PART_INSTALL/unpacked
       cp $SNAPCRAFT_PROJECT_DIR/com.github.kenvandine.gemini-desktop.desktop $SNAPCRAFT_PART_INSTALL/unpacked/
       cp $SNAPCRAFT_PROJECT_DIR/icon.png $SNAPCRAFT_PART_INSTALL/
-      mv dist/linux*-unpacked/* $SNAPCRAFT_PART_INSTALL/unpacked 
+      mv dist/linux*-unpacked/* $SNAPCRAFT_PART_INSTALL/unpacked
+      cp $SNAPCRAFT_PROJECT_DIR/com.github.kenvandine.gemini-desktop-autostart.desktop $SNAPCRAFT_PART_INSTALL/
     prime:
+      - com.github.kenvandine.gemini-desktop*.desktop
       - unpacked
       - icon.png
       - -*/chrome-sandbox
@@ -76,6 +78,7 @@ apps:
   gemini-desktop:
     extensions: [gnome]
     desktop: unpacked/com.github.kenvandine.gemini-desktop.desktop
+    autostart: gemini-desktop.desktop
     command: launcher
     plugs:
       - audio-playback

@@ -8,8 +8,39 @@ let win = null;
 let wasOffline = false;
 const appURL = 'https://gemini.google.com'
 const icon = nativeImage.createFromPath(join(__dirname, 'icon.png'));
+const isTray = process.argv.includes('--tray');
+const snapPath = process.env.SNAP
+const snapUserData = process.env.SNAP_USER_DATA
 const isScreenshotMode = process.env.TEST_SCREENSHOT === '1';
 const screenshotPath = process.env.SCREENSHOT_PATH || 'screenshot.png';
+let autostart = false;
+
+function initializeAutostart() {
+  if (fs.existsSync(snapUserData + '/.config/autostart/gemini-desktop.desktop')) {
+    console.log('Autostart file exists')
+    autostart = true;
+  } else {
+    console.log('Autostart file does not exist')
+    autostart = false;
+  }
+}
+
+function handleAutoStartChange() {
+  if (autostart) {
+    console.log("Enabling autostart");
+    if (!fs.existsSync(snapUserData + '/.config/autostart')) {
+      fs.mkdirSync(snapUserData + '/.config/autostart', { recursive: true });
+    }
+    if (!fs.existsSync(snapUserData + '/.config/autostart/gemini-desktop.desktop')) {
+      fs.copyFileSync(snapPath + '/com.github.kenvandine.gemini-desktop-autostart.desktop', snapUserData + '/.config/autostart/gemini-desktop.desktop');
+    }
+  } else {
+    console.log("Disabling autostart");
+    if (fs.existsSync(snapUserData + '/.config/autostart/gemini-desktop.desktop')) {
+      fs.rmSync(snapUserData + '/.config/autostart/gemini-desktop.desktop');
+    }
+  }
+}
 
 // Centralized list of hosts allowed to navigate within the Electron window
 // Used by both will-navigate handler and preload click handler
@@ -132,7 +163,7 @@ function createWindow () {
     x: isScreenshotMode ? undefined : x + ((width - (width * 0.6)) / 2),
     y: isScreenshotMode ? undefined : y + ((height - (height * 0.8)) / 2),
     icon: icon,
-    show: isScreenshotMode ? false : undefined,
+    show: isScreenshotMode ? false : !isTray, // Start hidden if --tray or screenshot mode
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       nodeIntegration: true,
@@ -148,40 +179,6 @@ function createWindow () {
     event.preventDefault();
     win.hide();
   });
-
-  if (!isScreenshotMode) {
-  tray = new Tray(icon);
-
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show/Hide Gemini',
-      icon: icon,
-      click: () => {
-        if (win.isVisible()) {
-          win.hide();
-        } else {
-          win.show();
-        }
-      }
-    },
-    { type: 'separator' },
-    { label: 'About',
-      click: () => {
-	console.log("About clicked");
-	createAboutWindow();
-      }
-    },
-    { label: 'Quit',
-      click: () => {
-	console.log("Quit clicked, Exiting");
-	app.exit();
-      }
-    },
-  ]);
-
-  tray.setToolTip('Gemini');
-  tray.setContextMenu(contextMenu);
-  }
 
   // Show offline page if the URL fails to load (e.g. no internet)
   // Filter by network-related error codes to avoid incorrectly treating
@@ -501,7 +498,72 @@ ipcMain.on('get-app-metadata', (event) => {
     event.sender.send('app-author', appAuthor);
 });
 
-app.whenReady().then(createWindow);
+app.on('ready', () => {
+  console.log(`Electron Version: ${process.versions.electron}`);
+  console.log(`App Version: ${app.getVersion()}`);
+
+  if (!isScreenshotMode) {
+    tray = new Tray(icon);
+    // Ignore double click events for the tray icon
+    tray.setIgnoreDoubleClickEvents(true)
+    tray.on('click', () => {
+      console.log("AppIndicator clicked");
+      showOrHide();
+    });
+
+    // Ensure autostart is set properly at start
+    initializeAutostart();
+
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: `Show/Hide Gemini`,
+        icon: icon,
+        click: () => {
+          showOrHide();
+        }
+      },
+      {
+        label: 'Autostart',
+        type: 'checkbox',
+        checked: autostart,
+        click: () => {
+          autostart = contextMenu.items[1].checked;
+          console.log("Autostart toggled: " + autostart);
+          handleAutoStartChange();
+          // We need to setContextMenu to get the state changed for checked
+          tray.setContextMenu(contextMenu);
+        }
+      },
+      { type: 'separator' },
+      { label: 'About',
+        click: () => {
+          console.log("About clicked");
+	  createAboutWindow();
+        }
+      },
+      { label: 'Quit',
+        click: () => {
+          console.log("Quit clicked, Exiting");
+          app.exit();
+        }
+      },
+    ]);
+
+    tray.setToolTip('Gemini');
+    tray.setContextMenu(contextMenu);
+  }
+
+  createWindow();
+});
+
+function showOrHide() {
+  console.log("showOrHide");
+  if (win.isVisible()) {
+    win.hide();
+  } else {
+    win.show();
+  }
+}
 
 app.on('window-all-closed', () => {
   console.log("window-all-closed");
@@ -512,9 +574,4 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
-});
-
-app.on('ready', () => {
-  console.log(`Electron Version: ${process.versions.electron}`);
-  console.log(`App Version: ${app.getVersion()}`);
 });
