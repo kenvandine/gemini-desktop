@@ -9,8 +9,9 @@ This repository is maintained in part by the `automated-ken` fleet-maintenance
 system (https://github.com/kenvandine/automated-ken). Automated agents may:
 
 - Open pull requests bumping the packaged application/runtime version
-- Run the `YARF Snap Test` GitHub Actions workflow (`.github/workflows/snap-test.yml`)
-  against candidate/edge builds before promoting a release
+- Queue YARF UI test runs on a registered remote runner (real hardware polling the
+  automated-ken dashboard for jobs) against candidate/edge builds before promoting a
+  release
 - Review and comment on PRs, including AI-assisted screenshot review of UI test
   results
 
@@ -25,7 +26,8 @@ involved in running tests.
 
 ## Conventions
 
-- Do not remove `.github/workflows/snap-test.yml` or the `tests/suite/` directory;
-  they are required for automated release validation.
+- Do not remove the `tests/suite/` directory; it is required for automated release
+  validation. There is no test-running GitHub Actions workflow in this repo by
+  design — tests run on a registered remote runner.
 - Redundant upstream-polling / sync-release workflows that duplicate automated-ken's
   own version-bump automation should be removed to avoid conflicting/duplicate PRs.
