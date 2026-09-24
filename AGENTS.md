@@ -17,10 +17,11 @@ system (https://github.com/kenvandine/automated-ken). Automated agents may:
 ## Tests
 
 YARF UI test suites belong under `tests/suite/` in this repository. They are
-executed via the `YARF Snap Test` workflow, dispatched by the automated-ken
-dashboard with a target channel/architecture/revision. Test results (screenshots
-and metadata) are uploaded as workflow run artifacts and fetched directly by the
-dashboard.
+executed by a registered remote runner (physical/real hardware enrolled with the
+automated-ken dashboard), which polls the dashboard for queued jobs, downloads/
+installs the target snap build, runs the YARF suite locally, and uploads
+screenshots/results directly back to the dashboard. No GitHub Actions workflow is
+involved in running tests.
 
 ## Conventions
 
