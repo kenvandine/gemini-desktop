@@ -2,11 +2,16 @@ const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, shell } = 
 const { join, relative, normalize, isAbsolute, sep } = require('path');
 const { fileURLToPath } = require('url');
 const fs = require('fs');
+const { allowedHostRules } = require('./lib/allowed-hosts');
+const { errDetail, loadFailed } = require('./lib/utils');
+const { safeUrl } = require('./lib/safe-url');
+const navigation = require('./lib/navigation');
 
 let tray = null;
 let win = null;
 let wasOffline = false;
 const appURL = 'https://gemini.google.com'
+const appURLHost = new URL(appURL).host;
 const icon = nativeImage.createFromPath(join(__dirname, 'icon.png'));
 const isTray = process.argv.includes('--tray');
 const snapPath = process.env.SNAP
@@ -14,6 +19,12 @@ const snapUserData = process.env.SNAP_USER_DATA
 const isScreenshotMode = process.env.TEST_SCREENSHOT === '1';
 const screenshotPath = process.env.SCREENSHOT_PATH || 'screenshot.png';
 let autostart = false;
+
+// Google gates some integrations (Drive-backed file preview) on a recognised
+// browser UA; the Electron token is enough to fail that check.
+app.userAgentFallback = app.userAgentFallback.replace(/ Electron\/[\d.]+/, '');
+
+navigation.init({ getMainWindow: () => win, icon, appURLHost });
 
 function initializeAutostart() {
   if (fs.existsSync(snapUserData + '/.config/autostart/gemini-desktop.desktop')) {
@@ -41,13 +52,6 @@ function handleAutoStartChange() {
     }
   }
 }
-
-// Centralized list of hosts allowed to navigate within the Electron window
-// Used by both will-navigate handler and preload click handler
-const allowedHosts = [
-  'gemini.google.com',
-  'accounts.google.com',
-];
 
 // IPC listeners (registered once, outside createWindow to avoid leaks)
 ipcMain.on('zoom-in', () => {
@@ -83,15 +87,13 @@ ipcMain.on('log-message', (event, message) => {
   console.log('Log from preload: ', message);
 });
 
-// Return allowed hosts list to preload script
-ipcMain.handle('get-allowed-hosts', () => {
-  return allowedHosts;
-});
+// Pre-filter for the preload's link clicks; navigation.js does the enforcing.
+ipcMain.handle('get-allowed-hosts', () => allowedHostRules());
 
-// Open links with default browser
+// Links the preload filtered out; in-app content stays, the rest to the browser.
 ipcMain.on('open-external-link', (event, url) => {
-  console.log('open-external-link: ', url);
-  
+  console.log('open-external-link: ', safeUrl(url));
+
   if (!url || typeof url !== 'string') {
     console.warn('open-external-link: invalid url value');
     return;
@@ -107,7 +109,7 @@ ipcMain.on('open-external-link', (event, url) => {
   try {
     parsedUrl = new URL(trimmedUrl);
   } catch (e) {
-    console.warn('open-external-link: failed to parse url', e);
+    console.warn('open-external-link: failed to parse url', errDetail(e));
     return;
   }
 
@@ -119,7 +121,7 @@ ipcMain.on('open-external-link', (event, url) => {
     return;
   }
 
-  shell.openExternal(trimmedUrl);
+  navigation.openInAppContentOrBrowser(trimmedUrl, parsedUrl.hostname, 'open-external-link');
 });
 
 // Retry connection from offline page
@@ -130,7 +132,7 @@ ipcMain.on('retry-connection', () => {
     return;
   }
   wasOffline = false;
-  win.loadURL(appURL);
+  win.loadURL(appURL).catch(loadFailed('retry-connection'));
 });
 
 // Listen for network status updates from the preload script
@@ -146,7 +148,7 @@ ipcMain.on('network-status', (event, isOnline) => {
   // User must explicitly click Retry to attempt reconnection
   if (!isOnline && !wasOffline) {
     wasOffline = true;
-    win.loadFile('offline.html');
+    win.loadFile('offline.html').catch(loadFailed('offline page'));
   }
 });
 
@@ -188,7 +190,7 @@ function createWindow () {
     'did-fail-load',
     (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       console.log(
-        `did-fail-load: ${errorDescription} (${errorCode}) on ${validatedURL} (isMainFrame=${isMainFrame})`
+        `did-fail-load: ${errorDescription} (${errorCode}) on ${safeUrl(validatedURL)} (isMainFrame=${isMainFrame})`
       );
 
       // Only handle failures for the main frame to avoid subresource/iframe failures
@@ -214,7 +216,7 @@ function createWindow () {
           if (isDifferentDomain) {
             console.log(
               'did-fail-load: main-frame failure for non-app URL, not showing offline page:',
-              validatedURL
+              safeUrl(validatedURL)
             );
             return;
           }
@@ -222,7 +224,7 @@ function createWindow () {
           // If URL parsing fails, be conservative and don't show offline page
           console.log(
             'did-fail-load: failed to parse URLs, not showing offline page:',
-            validatedURL
+            safeUrl(validatedURL)
           );
           return;
         }
@@ -262,14 +264,14 @@ function createWindow () {
 
       if (networkErrors.includes(errorCode)) {
         wasOffline = true;
-        win.loadFile('offline.html');
+        win.loadFile('offline.html').catch(loadFailed('offline page'));
       } else {
         console.log(`did-fail-load: ignoring non-network error ${errorCode}`);
       }
     }
   );
 
-  win.loadURL(appURL);
+  win.loadURL(appURL).catch(loadFailed('main window'));
 
   win.webContents.on('did-finish-load', () => {
     if (isScreenshotMode) {
@@ -289,9 +291,6 @@ function createWindow () {
     }
   });
 
-  // Use centralized allowedHosts (convert to Set for efficient lookup)
-  const allowedHostsSet = new Set(allowedHosts);
-
   // Intercept navigation and only allow app + auth hosts in-app
   win.webContents.on('will-navigate', (event, url) => {
     // Allow file:// protocol only for app-internal files
@@ -308,95 +307,47 @@ function createWindow () {
         // so we also check for absolute paths. Additionally, we need to check if
         // relativePath starts with '..' followed by separator to catch escape attempts.
         if (isAbsolute(relativePath)) {
-          console.warn('will-navigate: blocked file:// URL on different drive/root', url);
+          console.warn('will-navigate: blocked file:// URL on different drive/root', safeUrl(url));
           event.preventDefault();
           return;
         }
         
         if (relativePath.startsWith('..' + sep) || relativePath === '..') {
-          console.warn('will-navigate: blocked file:// URL outside app directory', url);
+          console.warn('will-navigate: blocked file:// URL outside app directory', safeUrl(url));
           event.preventDefault();
           return;
         }
         
-        console.log('will-navigate: allowing app-internal file:// protocol', url);
+        console.log('will-navigate: allowing app-internal file:// protocol', safeUrl(url));
         return;
       } catch (e) {
-        console.warn('will-navigate: invalid file:// URL', url, e);
+        console.warn('will-navigate: invalid file:// URL', safeUrl(url), errDetail(e));
         event.preventDefault();
         return;
       }
     }
     
-    try {
-      const parsedUrl = new URL(url);
-      // Use hostname (not host) to exclude port from comparison
-      const targetHostname = parsedUrl.hostname;
-      
-      // Only handle http(s) protocols - prevent potentially unsafe protocols
-      if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
-        if (!allowedHostsSet.has(targetHostname)) {
-          console.log('will-navigate external: ', url);
-          event.preventDefault();
-          shell.openExternal(url);
-        }
-      } else {
-        // Block other protocols (javascript:, data:, etc.) as they could be unsafe
-        console.warn('will-navigate: blocked unsafe protocol', parsedUrl.protocol, url);
-        event.preventDefault();
-      }
-    } catch (e) {
-      console.warn('will-navigate: invalid URL, preventing navigation', url, e);
-      event.preventDefault();
-    }
+    navigation.guardAppNavigation(event, url, 'will-navigate');
   });
 
-  const appHost = new URL(appURL).host;
+  // will-navigate will only see the pre-redirect URL, so we must inspect the redirects as well
+  win.webContents.on('will-redirect', (event) => {
+    if (!event.isMainFrame) return;
+    navigation.guardAppNavigation(event, event.url, 'will-redirect');
+  });
 
-  // New-window requests (window.open / target="_blank"): only keep the
-  // app host in-app; everything else opens in the default browser with
-  // a strict allowlist of URL schemes.
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    console.log('windowOpenHandler: ', url);
+  win.webContents.setWindowOpenHandler(navigation.mainWindowOpenHandler());
 
-    // Explicitly allow mailto links
-    if (url.startsWith('mailto:')) {
-      shell.openExternal(url);
-      return { action: 'deny' };
-    }
-
-    let parsedUrl;
-    try {
-      parsedUrl = new URL(url);
-    } catch (e) {
-      console.warn('windowOpenHandler: invalid URL, denying navigation', url, e);
-      return { action: 'deny' };
-    }
-
-    const { protocol, host } = parsedUrl;
-
-    // Keep same-host http(s) links in-app
-    if ((protocol === 'https:' || protocol === 'http:') && host === appHost) {
-      win.loadURL(url);
-      return { action: 'deny' };
-    }
-
-    // Open other http(s) links externally
-    if (protocol === 'https:' || protocol === 'http:') {
-      shell.openExternal(url);
-    } else {
-      // Block non-http(s) schemes (file:, javascript:, custom protocols, etc.)
-      console.warn('windowOpenHandler: blocked non-http(s) URL', url);
-    }
-
-    return { action: 'deny' };
+  // Guard popups, so only expected content stays in app
+  win.webContents.on('did-create-window', (childWin) => {
+    navigation.attachPopupGuards(childWin, 'popup');
   });
 
   win.webContents.on('before-input-event', (event, input) => {
     if (input.control && input.key.toLowerCase() === 'r') {
       console.log('Pressed Control+R')
       event.preventDefault()
-      win.loadURL(appURL);
+      win.loadURL(appURL).catch(loadFailed('reload'));
     }
   })
 }
@@ -451,7 +402,7 @@ function createAboutWindow() {
     parent: win  // Set the main window as parent
   });
 
-  aboutWindow.loadFile('about.html');
+  aboutWindow.loadFile('about.html').catch(loadFailed('about window'));
   aboutWindow.removeMenu();
 
   // Read version from package.json
@@ -476,7 +427,7 @@ function createAboutWindow() {
   // Link clicks open new windows, let's force them to open links in
   // the default browser
   aboutWindow.webContents.setWindowOpenHandler(({url}) => {
-    console.log('windowOpenHandler: ', url);
+    console.log('windowOpenHandler: ', safeUrl(url));
     shell.openExternal(url);
     return { action: 'deny' }
   });
