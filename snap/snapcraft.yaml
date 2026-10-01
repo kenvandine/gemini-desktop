@@ -41,14 +41,14 @@ parts:
     override-build: |
       npm install
       npm run build
-      mkdir -p $SNAPCRAFT_PART_INSTALL/unpacked
-      cp $SNAPCRAFT_PROJECT_DIR/com.github.kenvandine.gemini-desktop.desktop $SNAPCRAFT_PART_INSTALL/unpacked/
+      mkdir -p $SNAPCRAFT_PART_INSTALL/usr/lib/gemini-desktop
+      cp -r $SNAPCRAFT_PROJECT_DIR/com.github.kenvandine.gemini-desktop.desktop $SNAPCRAFT_PART_INSTALL/usr/lib/gemini-desktop/
       cp $SNAPCRAFT_PROJECT_DIR/icon.png $SNAPCRAFT_PART_INSTALL/
-      mv dist/linux*-unpacked/* $SNAPCRAFT_PART_INSTALL/unpacked
-      cp $SNAPCRAFT_PROJECT_DIR/com.github.kenvandine.gemini-desktop-autostart.desktop $SNAPCRAFT_PART_INSTALL/
+      cp -r dist/linux*-unpacked/* $SNAPCRAFT_PART_INSTALL/usr/lib/gemini-desktop/
+      cp $SNAPCRAFT_PROJECT_DIR/com.github.kenvandine.gemini-desktop-autostart.desktop $SNAPCRAFT_PART_INSTALL/usr/lib/gemini-desktop/
     prime:
-      - com.github.kenvandine.gemini-desktop*.desktop
-      - unpacked
+      - usr/lib/gemini-desktop/com.github.kenvandine.gemini-desktop*.desktop
+      - usr/lib/gemini-desktop
       - icon.png
       - -*/chrome-sandbox
       - -*/resources/app.asar.unpacked/node_modules/sharp/vendor/lib
@@ -77,8 +77,8 @@ plugs:
 apps:
   gemini-desktop:
     extensions: [gnome]
-    desktop: unpacked/com.github.kenvandine.gemini-desktop.desktop
-    autostart: gemini-desktop.desktop
+    desktop: usr/lib/gemini-desktop/com.github.kenvandine.gemini-desktop.desktop
+    autostart: usr/lib/gemini-desktop/com.github.kenvandine.gemini-desktop-autostart.desktop
     command: launcher
     plugs:
       - audio-playback
