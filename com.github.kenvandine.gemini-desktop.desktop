@@ -7,3 +7,5 @@ Exec=gemini-desktop
 Icon=${SNAP}/unpacked/resources/app/icon.png
 Categories=Accessories;
 Keywords=AI;Copilot;GPT;ChatGPT;Gemini;
+StartupNotify=true
+X-GNOME-Autostart-enabled=true
