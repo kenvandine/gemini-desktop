@@ -85,6 +85,7 @@ apps:
       - audio-record
       - home
       - network
+      - network-observe
       - shmem
       - unity7
     environment:
