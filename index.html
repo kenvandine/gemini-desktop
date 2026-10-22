@@ -35,6 +35,30 @@
 <body>
     <div class="container">
         <h1>Checking Network Status...</h1>
+        <p id="status-message">Please wait while we check your network connection.</p>
+        <div id="login-container" style="display: none;">
+            <p>You need to log in to Google to continue.</p>
+            <button id="login-button">Open Login</button>
+        </div>
     </div>
+    <script>
+        // Check network status and handle login
+        window.onload = function() {
+            // Simulate network check
+            setTimeout(() => {
+                const statusMessage = document.getElementById('status-message');
+                const loginContainer = document.getElementById('login-container');
+                
+                // Show login button if we detect login is needed
+                // This is a simplified check - in a real app, you'd check actual auth status
+                statusMessage.textContent = 'Login required to access Gemini.';
+                loginContainer.style.display = 'block';
+                
+                document.getElementById('login-button').addEventListener('click', () => {
+                    window.openLogin();
+                });
+            }, 1000);
+        };
+    </script>
 </body>
 </html>

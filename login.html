@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Login - Gemini</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Ubuntu, Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #f3f2f1;
+            color: #323130;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            background: #f3f2f0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+        }
+        h1 {
+            font-size: 1.5em;
+            color: #000000;
+        }
+        p {
+            margin: 20px 0;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4285f4;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .close-btn {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .close-btn:hover {
+            background: #3367d6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Login</h1>
+        <p>Please sign in to your Google account to continue.</p>
+        <div class="spinner"></div>
+        <p id="status-message">Loading login page...</p>
+        <button class="close-btn" onclick="window.close();">Close</button>
+    </div>
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        // Listen for login completion from main process
+        ipcRenderer.on('login-complete', (event, data) => {
+            document.getElementById('status-message').textContent = 'Login successful! Closing window...';
+            setTimeout(() => {
+                window.close();
+            }, 1000);
+        });
+        
+        // Simulate login process
+        window.onload = function() {
+            // In a real implementation, this would be replaced with actual login logic
+            // For now, we simulate a successful login after a short delay
+            setTimeout(() => {
+                document.getElementById('status-message').textContent = 'Login successful!';
+                // Notify main process that login is complete
+                ipcRenderer.send('login-complete', { success: true });
+            }, 3000);
+        };
+    </script>
+</body>
+</html>
