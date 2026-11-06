@@ -21,6 +21,7 @@ icon: icon512.png
 platforms:
   amd64:
   arm64:
+  riscv64:
 compression: lzo
 
 parts:
