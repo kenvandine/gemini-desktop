@@ -1,10 +1,7 @@
 #!/bin/bash
 
-if [[ ! -n "$DISABLE_WAYLAND" && -n "$WAYLAND_DISPLAY" ]]; then
-  WAYLAND_OPTS="--enable-features=UseOzonePlatform --ozone-platform-hint=auto --enable-wayland-ime"
-fi
+# Set GTK version to avoid conflicts
+export GTK_VERSION=3
 
-exec $SNAP/unpacked/gemini-desktop \
-	--disable-dev-shm-usage \
-	$WAYLAND_OPTS \
-	--no-sandbox "$@"
+# Execute the main application with GTK version specified
+exec /snap/gemini-desktop/current/unpacked/gemini-desktop --gtk-version=3 "$@"
