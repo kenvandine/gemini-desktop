@@ -7,3 +7,4 @@ Exec=gemini-desktop
 Icon=${SNAP}/unpacked/resources/app/icon.png
 Categories=Accessories;
 Keywords=AI;Copilot;GPT;ChatGPT;Gemini;
+Environment=GTK_BACKEND=wayland
