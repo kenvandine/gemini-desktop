@@ -22,7 +22,7 @@ You will need to install [npm](https://www.npmjs.com/), the Node.js package mana
 Once you have npm, clone the wrapper to a convenient location:
 
 ```bash
-git clone https://github.com/kenvandine/gemini-desktop.git
+ git clone https://github.com/kenvandine/gemini-desktop.git
 ```
 
 ## Building
@@ -39,7 +39,17 @@ On subsequent runs, `npm start` will be all that's required.
 Simply pull the latest version of master and install any changed dependencies:
 
 ```bash
-git checkout main
-git pull
-npm install
+ git checkout main
+ git pull
+ npm install
 ```
+
+## Microphone Access
+
+On some Linux distributions, including Kubuntu 24.04, you may need to explicitly connect the audio-record interface for microphone access:
+
+```bash
+sudo snap connect gemini-desktop:audio-record
+```
+
+After running this command, restart the application for the changes to take effect.
